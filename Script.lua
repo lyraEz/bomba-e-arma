@@ -142,6 +142,23 @@ local function detectExplosion()
             end)
         end
     end)
+    
+    local player = Players.LocalPlayer
+    if player then
+        local function setupHumanoidDiedConnection(character)
+            if not character then return end
+            
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.Died:Connect(function()
+                    resetBombCooldown()
+                end)
+            end
+        end
+        
+        setupHumanoidDiedConnection(player.Character)
+        player.CharacterAdded:Connect(setupHumanoidDiedConnection)
+    end
 end
 
 local function quickUseGun()
@@ -553,22 +570,84 @@ local function updateBombCooldown()
             end
         end
     end)
+    
+    if player.Character then
+        local lastPosition = player.Character:GetPrimaryPartCFrame().Position
+        local teleportThreshold = 999
+        
+        RunService.Heartbeat:Connect(function()
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local currentPosition = player.Character:GetPrimaryPartCFrame().Position
+                local distance = (currentPosition - lastPosition).Magnitude
+                
+                if distance > teleportThreshold then
+                    resetBombCooldown()
+                end
+                
+                lastPosition = currentPosition
+            end
+        end)
+    end
+end
+
+local function resetBombCooldown()
+    bombCooldownActive = false
+    bombCooldownEndTime = 0
+    
+    -- Reset visual da pra tirar depois
+    task.spawn(function()
+        local player = Players.LocalPlayer
+        if player then
+            local playerGui = player:FindFirstChild("PlayerGui")
+            if playerGui then
+                local dualEquipGui = playerGui:FindFirstChild("DualEquipGui")
+                if dualEquipGui then
+                    local bombButton = dualEquipGui:FindFirstChild("BombButton")
+                    local cooldownLabel = dualEquipGui:FindFirstChild("BombCooldownLabel")
+                    
+                    if bombButton and cooldownLabel then
+                        cooldownLabel.Visible = false
+                        local border = bombButton:FindFirstChild("ColorBorder")
+                        if border then
+                            border.BackgroundColor3 = Color3.fromRGB(60, 60, 220)
+                        end
+                    end
+                end
+            end
+        end
+    end)
 end
 
 local function onPlayerAdded(player)  
     if player:IsA("Player") then  
         local gui = createMobileButtons()  
         gui.Parent = player:WaitForChild("PlayerGui")  
-        player.CharacterAdded:Connect(function()  
-            wait(0.001)  
-            if gui.Parent ~= player.PlayerGui then  
-                gui.Parent = player:WaitForChild("PlayerGui")  
-            end  
-        end)
         
         if player == Players.LocalPlayer then
+            player.CharacterAdded:Connect(function(character)  
+                wait(0.001)  
+                if gui.Parent ~= player.PlayerGui then  
+                    gui.Parent = player:WaitForChild("PlayerGui")  
+                end
+                
+                resetBombCooldown()
+                
+                character.AncestryChanged:Connect(function(_, newParent)
+                    if newParent == nil then
+                        resetBombCooldown()
+                    end
+                end)
+            end)
+            
             updateBombCooldown()
             detectExplosion()
+        else
+            player.CharacterAdded:Connect(function()  
+                wait(0.001)  
+                if gui.Parent ~= player.PlayerGui then  
+                    gui.Parent = player:WaitForChild("PlayerGui")  
+                end  
+            end)
         end
     end  
 end  
